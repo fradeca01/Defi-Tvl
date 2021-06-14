@@ -34,7 +34,7 @@ To run the **first part** [Part1-TVL.Rmd](https://github.com/fradeca01/Defi-Tvl/
 
 To run the **second part** [Part2-TVL.Rmd](https://github.com/fradeca01/Defi-Tvl/blob/main/Part2-apr.Rmd) you need to download the following [files](https://uniudamce-my.sharepoint.com/:f:/g/personal/154259_spes_uniud_it/EhohMC4-EAxMkkeAwCi-hXIBVfZrsmgs9u9ohWm9LtFOIw?e=wu3N6K). Just move the folder inside your project folder.
 
-To run the **presentation** [file.rmd]() you need to download this files:
+To run the **presentation** [Presentation.rmd](https://github.com/fradeca01/Defi-Tvl/blob/main/Presentation.Rmd) you need to download this files:
 
 * [protocols.rds](https://github.com/fradeca01/Defi-Tvl/blob/main/protocols.rds)
 * [plots.rds](https://github.com/fradeca01/Defi-Tvl/blob/main/plots.rds)
