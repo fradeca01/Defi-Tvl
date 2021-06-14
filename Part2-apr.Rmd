@@ -65,7 +65,7 @@ $$
 APR = k\,\,\frac{\text{CAKE PRICE}}{\text{TOTAL POOL LIQUIDITY}}
 $$
 
-With this in mind, here we define the functions to calculate the APR given the list of the transactions of a certain smart contract. To see how the database of the transactions is obtained, refer to this [Python script](https://github.com/fradeca01/DeFi-Tvl-Analysis/blob/main/download_pswap_db.py).
+With this in mind, here we define the functions to calculate the APR given the list of the transactions of a certain smart contract. To see how the database of the transactions is obtained, refer to this [Python script](https://github.com/fradeca01/Defi-Tvl/blob/main/download_pswap_db.py).
 
 ```{r Private Functions}
 
