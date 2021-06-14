@@ -1,6 +1,4 @@
-# Defi-Tvl
- 
-# DeFi Tvl Analysis
+# Defi-Tvl Analysis
 
 > A brief study of the TVL of some DeFi platforms in R.
 
