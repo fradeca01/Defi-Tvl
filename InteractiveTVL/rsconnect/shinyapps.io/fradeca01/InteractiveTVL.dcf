@@ -1,0 +1,13 @@
+name: InteractiveTVL
+title: InteractiveTVL
+username:
+account: fradeca01
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 4269134
+bundleId: 4714839
+url: https://fradeca01.shinyapps.io/InteractiveTVL/
+when: 1623680010.83709
+lastSyncTime: 1623680010.83709
+asMultiple: FALSE
+asStatic: FALSE

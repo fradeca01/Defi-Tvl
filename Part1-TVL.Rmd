@@ -1,0 +1,448 @@
+---
+title: "Part 1: Analysis of DeFi TVL"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+editor_options: 
+  chunk_output_type: inline
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+In this project we are going to analyze some DeFi platforms. In particular we will focus on a metric, the *TVL (Total Value Locked)*, which is an index of the liquidity of a determined platform. According to the [DYOR Crypto wiki](https://dyor-crypto.fandom.com/wiki/Total_Locked_Value_(TLV)) it is defined as follows:
+
+> TVL represents the amount of assets that are currently being staked in a specific protocol. This value is by no means meant to represent the amount of outstanding loans, but rather the total amount of underlying supply being secured by a specific application and/or by DeFi as a whole.
+
+To begin our analysis, we need first of all to load some *libraries*:
+
+```{r Libraries, message=FALSE, warning=FALSE}
+#Libraries for interactive and grid plots
+library(dygraphs)
+library(gridExtra)
+library(xts)
+library(cowplot)
+
+#Tidyverse
+library(lubridate)  
+library(modelr)
+library(tidyverse)
+
+#Libraries for APIs calls
+library(jsonlite)
+library(httr)
+
+#My pacakge, to install run: install_github("fradeca01/cryptoprice")
+library(cryptoprice)
+```
+
+We download the dataset from [DeFi Llama](https://defillama.com/home) API. For each platform we get:
+
+* the **TVL** 
+* in which blockchain it's deployed 
+* generic datas
+
+```{r Tidy}
+#Get protocol list
+
+# URL = "https://api.llama.fi/protocols"
+# 
+# data = as_tibble(fromJSON(rawToChar(GET(URL)$content)))
+# 
+# saveRDS(data, file="tvl.rds")
+
+data = readRDS(file = "tvl(2021-06-12).rds") #We are using the data downloaded on 12 June 2021 and saved in a RDS file.
+
+#Select only useful variables
+data = select(data, id, name, symbol, chain, category, chains, tvl, chainTvls)
+
+#We are working only with Dexes/Lending/Yield projects
+data = filter(data, category == "Dexes" | category == "Lending" | category == "Yield")
+
+#We are working only with projects running on Ethereum/Polygon or BSC 
+data = filter(data, chain=="Ethereum" | chain=="Binance" | chain=="Polygon" | chain=="Multi-Chain") %>%
+  mutate(chainTvls = select(chainTvls, Ethereum, Binance, Polygon))
+
+#Add variables to identify in wihch blockchain each protocol runs
+data = data %>%
+  mutate(Ethereum = unlist(map(chains, function(x) "Ethereum" %in% x)))%>%
+  mutate(Binance = unlist(map(chains, function(x) "Binance" %in% x)))%>%
+  mutate(Polygon = unlist(map(chains, function(x) "Polygon" %in% x)))
+  
+#Notice also that in some single chain platforms, like PancakeSwap, the chain Tvl is set to NA, let's fix that:
+ids = data %>%
+    filter(Binance == TRUE & is.na(chainTvls$Binance)) %>%
+   pull(id)
+ 
+data[data$id %in% ids,]$chainTvls$Binance = data[data$id %in% ids,]$tvl
+
+ids = data %>%
+    filter(Polygon == TRUE & is.na(chainTvls$Polygon)) %>%
+   pull(id)
+ 
+data[data$id %in% ids,]$chainTvls$Polygon = data[data$id %in% ids,]$tvl
+
+ids = data %>%
+    filter(Ethereum == TRUE & is.na(chainTvls$Ethereum)) %>%
+   pull(id)
+ 
+data[data$id %in% ids,]$chainTvls$Ethereum = data[data$id %in% ids,]$tvl
+```
+
+To begin let's see which platforms (or protocol) have *higher TVL*, grouping them by *chain*.
+
+```{r TotalTVL}
+plots = vector("list", 6)
+
+#Plot best platforms grouping in chains:
+plots[[1]] = data %>%
+  arrange(desc(tvl))%>%
+  head(7) %>%
+  ggplot(aes(reorder(name ,-tvl), tvl/10^9)) + 
+    geom_bar(aes(fill = chain), 
+             orientation = "x", 
+             color = "green",
+             stat = "identity",
+             alpha = 0.7) +
+    scale_fill_manual(values =c("Ethereum" = "blue", "Binance" = "gold", "Multi-Chain" = "red"))+
+    labs(title = "TVL",
+         subtitle = "All chains",
+         fill = "Chains") +
+    xlab("Protocol") +
+    ylab("TVL(Bilion $)") + 
+    theme_bw()+
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) #Rotate x labels
+
+plots[[1]]
+```
+
+Now we check more in detail the TVL of different platforms for each chain:
+
+```{r TotalTVLChains}
+#BSC
+plots[[2]] = data %>%
+  filter(Binance == TRUE) %>%
+  arrange(desc(tvl)) %>%
+  head(5) %>%
+  ggplot() +
+    geom_col(aes(reorder(name,-chainTvls$Binance), 
+                 y = chainTvls$Binance/10^9), 
+             fill = "gold", 
+             color="green",
+             alpha = 0.7) +
+    labs(title = "TVL", subtitle = "Binance Smart Chain") +
+    xlab("Protocol") +
+    ylab("TVL(Bilion $)") + 
+    theme_bw()+
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+ 
+#Polygon
+plots[[3]] = data %>%
+  filter(Polygon == TRUE) %>%
+  arrange(desc(tvl)) %>%
+  head(5) %>%
+  ggplot() +
+    geom_col(aes(reorder(name,-chainTvls$Polygon),
+                 y = chainTvls$Polygon/10^9), 
+             fill = "purple",
+             color="green", 
+             alpha = 0.7) +
+    labs(title = "TVL", subtitle = "Polygon") +
+    xlab("Protocol") +
+    ylab("TVL(Bilion $)") + 
+    theme_bw()+
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+#Ethereum
+plots[[4]] = data %>%
+  filter(Ethereum == TRUE) %>%
+  arrange(desc(tvl)) %>%
+  head(5) %>%
+  ggplot() +
+    geom_col(aes(reorder(name,-chainTvls$Ethereum),
+                 y = chainTvls$Ethereum/10^9), fill = "blue", color="green", alpha = 0.7) +
+    labs(title = "TVL", subtitle = "Ethereum Mainnet") +
+    xlab("Protocol") +
+    ylab("TVL(Bilion $)") + 
+    theme_bw()+
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+plot_grid(plots[[2]], plots[[3]], plots[[4]], ncol = 3)
+```
+
+Analyzing the plot we see that Ethereum is the blockchain where most platforms have locked tokens. On Binance Smart Chain that  **PancakeSwap** is the only platform with a comparable *TVL*. *Polygon* is almost used by the same platforms as *Ethereum* (apart from **Quickswap**).
+
+Now we analyze the evolution of the *TVL* over time, starting from the beginning of 2021, downloading the data from [Defi Llama](https://defillama.com/home) as before. For this purpose we begin analyzing the five platforms with higher capitalization:
+
+1. AAVE 
+2. Curve
+3. PancakeSwap
+4. Compound
+5. Uniswap
+
+```{r getTVLData}
+BASE_URL = "https://api.llama.fi/protocol/"
+
+#Get the names of the 5 most capitalized platforms.
+top = head(arrange(data, desc(tvl)), 5)
+
+protocolsNames = top$name
+
+#Normalize the data to query the DefiLama API
+protocolsNames = unlist(lapply(protocolsNames, function(x){
+  gsub(" ", "-", x)
+}))
+
+#Get the number of platforms we are going to analyze
+l = length(protocolsNames)
+
+#Function which gets the history of the TVL of a given project.
+historyTvl = function(protocolName){
+  
+  URL = paste(BASE_URL, protocolName ,sep="")
+  
+  res = rawToChar(GET(URL)$content)
+  
+  df = as_tibble(fromJSON(res)$tvl)
+
+  df = mutate(df, date = as_date(as_datetime(date)))%>%
+    filter(date > as_date("2021-01-01"))%>%
+    mutate(totalLiquidityUSD = totalLiquidityUSD / 10^9)
+  
+  df
+}
+
+#Get the data-frames of the platforms
+protocolsTvl = vector("list", l)
+
+for (i in 1:l){
+  protocolsTvl[[i]] = historyTvl(protocolsNames[i])
+}
+
+names(protocolsTvl) = protocolsNames
+
+#Store the data-frames inside a tibble named "protocols"
+protocols = tibble(name = protocolsNames, tvl = protocolsTvl)
+```
+
+```{r Plot1}
+ #Function which generates the plot
+ genPlot1 = function(name){
+   ggplot(protocols$tvl[[name]])+
+     ggtitle(name) +
+     geom_line(aes(date, totalLiquidityUSD), color = "red") +
+     labs(subtitle = "TVL over time") +
+     xlab("Date") +
+     ylab("TVL(Bilion $)") +
+     theme_bw()
+ }
+
+#Save the plots in protocols tibble
+protocols = mutate(protocols, plot1 = map(name, genPlot1))
+
+#Plot the plots in a grid
+do.call("plot_grid", c(protocols$plot1, ncol=3))
+```
+
+Observing the plots, we notice that they follow a similar pattern: is the *TVL* affected by a common factor? To answer this question, we could try to compare the *TVL* with the price of *Ether(ETH)*, the token on which most of our platforms are based:
+
+```{r ETH, results="hide"}
+ethId = get_token_id("eth")
+
+ethPrice = get_token_price(ethId, 180, "daily") %>%
+  select(date, price) %>%
+  filter(date > "2021-01-01")
+         
+ggplot(ethPrice) + 
+  geom_line(aes(date, price), color="darkblue")+
+     labs(title = "Ethereum", subtitle = "Price") +
+     xlab("Date") +
+     ylab("Price") +
+     theme_bw()
+```
+
+To see if there is a correlation, let's plot the *TVL* and the *ETH Price* in the same plot:
+
+*Note: the price of ETH is re-scaled in each plot, so that it's visible on top of the TVL plot*
+
+> At [this link](https://fradeca01.shinyapps.io/InteractiveTVL/) you can find an interactive plot.
+
+```{r Plot2}
+#Inner join ETH price with TVLs tibbles
+for(i in 1:l){
+  protocols$tvl[[i]] = inner_join(protocols$tvl[[i]], ethPrice, by="date") %>%
+     rename(ethPrice = price) %>%
+     mutate(ethPrice = ethPrice*3/10^3) #Rescaline the price so it's visible in the plots
+}
+
+genPlot2 = function(name){
+   ggplot(data = protocols$tvl[[name]])+
+     ggtitle(name) +
+     geom_line(aes(date, totalLiquidityUSD), color = "red") +
+     labs(subtitle = "TVL over time") +
+     xlab("Date") +
+     ylab("TVL(Bilion $)") +
+     geom_line(aes(date, ethPrice), color="darkBlue")+
+     theme_bw()
+ }
+
+protocols = mutate(protocols, plot2 = map(name, genPlot2))
+
+do.call("plot_grid", c(protocols$plot2, ncol=3))
+```
+```{r genDygraphs}
+genDygraphsNoEth = function(name){
+  xts(x = protocols$tvl[[name]][c(1, 2)], order.by = protocols$tvl[[name]]$date)
+}
+
+genDygraphsEth = function(name){
+  xts(x = protocols$tvl[[name]][c(1, 2, 3)], order.by = protocols$tvl[[name]]$date)
+}
+
+protocols = mutate(protocols, dygraphsEth = map(name, genDygraphsEth))
+names(protocols$dygraphsEth) = protocolsNames
+protocols = mutate(protocols, dygraphsNoEth = map(name, genDygraphsNoEth))
+names(protocols$dygraphsNoEth) = protocolsNames
+```
+
+From the plot above, the values seems correlated. Hence, we can try to make a scatter plot with *TVL* against *ETH Price*, where each point is representative of a different time:
+
+```{r Plot3}
+
+genPlot3 = function(name){
+  ggplot(data = protocols$tvl[[name]]) +
+    geom_point(aes(ethPrice, totalLiquidityUSD), color="darkblue")+
+    labs(title = name, subtitle = "ETH vs TVL") +
+    xlab("ETH Price") +
+    ylab("TVL(Bilion $)") +
+    theme_bw()
+}
+
+protocols = mutate(protocols, plot3 = map(name, genPlot3))
+
+do.call("plot_grid", c(protocols$plot3, ncol=3))
+
+```
+
+Now, we build a model for each platform, assuming a linear relation:
+
+```{r Plot4}
+
+#Function which builds the model
+makeModel = function(x){
+  lm(data = x, totalLiquidityUSD ~ ethPrice)
+}
+
+#Plug the model inside the tibble
+protocols = mutate(protocols, model = map(tvl, makeModel))
+
+#Store the R^2 of the models in a list 
+r2 = vector("double", l)
+for(i in 1:l){
+  r2[[i]] = summary(protocols$model[[i]])$r.squared
+}
+
+names(r2) = protocolsNames
+
+protocols = cbind(protocols, r2)
+
+
+protocols = mutate(protocols, tvl = map2(tvl, model, add_predictions))
+
+genPlot4 = function(name){
+  ggplot(data = protocols$tvl[[name]]) +
+    geom_point(aes(ethPrice, totalLiquidityUSD), color="darkblue")+
+    geom_line(aes(ethPrice, pred), color="red")+
+    labs(title = name, subtitle = "ETH vs TVL", caption=paste("R^2 =",r2[[name]])) +
+    xlab("ETH Price") +
+    ylab("TVL(Bilion $)") +
+    theme_bw()
+}
+
+protocols = mutate(protocols, plot4= map(name, genPlot4))
+
+do.call("plot_grid", c(protocols$plot4, ncol = 3))
+r2
+```
+
+The $R^2$ results are pretty satisfying, the *TVL* seems to be strongly correlated with *ETH* price. How can we explain this? A reason could be the fact that most of the funds staked in this platforms are *Ether* and therefore the *TVL* is basically following *ETH* price. However, **PancakeSwap** remains developed on the *Binance Smart Chain* and it does not have *ETH* as main token; why the correlation with ETH is good anyway? This probably happens due to the fact that *BNB*, the token of *Binance Smart Chain*, is following the market trend of *ETH*, a currency with higher *marketcap* by far. We can try to prove the correlation between BNB and ETH prices:
+
+```{r BNB}
+
+bnbId = get_token_id("bnb")
+bnbPrice = get_token_price(bnbId, 180, "daily") %>%
+  select(date, price)
+
+bnbvseth = inner_join(bnbPrice, ethPrice, by="date", suffix=c("Bnb", "Eth"))
+
+# ggplot(bnbvseth)+
+#   geom_point(aes(priceEth, priceBnb), color="blue")+
+#   labs(title = "BNB vs ETH") +
+#   xlab("ETH Price") +
+#   ylab("BNB Price") +
+#   theme_bw()
+
+model = lm(data=bnbvseth, priceBnb ~ priceEth)
+r2 = summary(model)$r.squared
+
+bnbvseth = add_predictions(bnbvseth, model)
+
+plots[[5]] = ggplot(bnbvseth)+
+  geom_point(aes(priceEth, priceBnb), color="darkgoldenrod3")+
+  geom_line(aes(priceEth, pred), color="red")+
+  labs(title = "BNB vs ETH", caption=paste("R^2 =",r2)) +
+  xlab("ETH Price") +
+  ylab("BNB Price") +
+  theme_bw()
+
+plots[[5]]
+r2
+
+
+```
+
+The *ETH* and the *BNB* are indeed correlated, for completeness we will also do a model of **PancakeSwap** *TVL* with *BNB Price*:
+
+```{r Pswap}
+pswap = protocols$tvl$PancakeSwap %>%
+  select(date, totalLiquidityUSD)
+
+pswap = inner_join(pswap, bnbPrice, by="date")%>%
+  rename("bnbPrice" = "price")
+
+mod2 = lm(data = pswap, totalLiquidityUSD ~ bnbPrice)
+
+pswap = add_predictions(pswap, mod2)
+
+r2 = summary(mod2)$r.squared
+
+plots[[6]] = ggplot(pswap)+
+  geom_point(aes(bnbPrice, totalLiquidityUSD), color="darkblue")+
+  geom_line(aes(bnbPrice, pred), color="red")+
+  labs(title = "PancakeSwap", subtitle = "BNB vs TVL", caption = paste("R^2 =", r2)) +
+  xlab("BNB Price") +
+  ylab("TVL(Bilion $)") +
+  theme_bw()
+
+plots[[6]]
+```
+
+As we guessed **PancakeSwap** *TVL* is better correlated with *BNB*, indeed $R^2\approx0.93$.
+
+We have learned that the *TVL in USD* of a *DeFi protocol* changes mainly because of the change in the value of the tokens deposited in the platform itself.
+
+***
+
+With this last chunk we save the *protocols* data-frame and *plots* list, which contain the result of all our analysis, in a *.rds* file.
+
+```{r saveRDS, eval=FALSE}
+protocols = protocols %>%
+  select(name, tvl, plot1, plot2, plot3, plot4, plot5, dygraphsEth, dygraphsNoEth, model, r2)
+
+saveRDS(protocols, file = "protocols.rds")
+saveRDS(plots, file = "plots.rds")
+```
+

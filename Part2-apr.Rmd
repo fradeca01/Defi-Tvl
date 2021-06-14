@@ -1,0 +1,383 @@
+---
+title: "Part 2: Analysis of Pancake Swap APR"
+output:
+  html_document: default
+  pdf_document: default
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+Load libraries:
+
+```{r libraries, include=FALSE}
+#Libraries for interactive and grid plots
+library(cowplot)
+
+#Libraries for DBs
+library(DBI)
+library(RSQLite)
+
+#Tidyverse
+library(lubridate)  
+library(modelr)
+library(tidyverse)
+
+#Libraries for APIs calls
+library(jsonlite)
+library(httr)
+
+#My library 
+library(cryptoprice)
+```
+
+An interesting application of the result of the preceding part is the calculation of the farm *APR* of **PancakeSwap** liquidity mining program. The *APR(Annual Percentage Rate)* represents the yield obtained from staking funds on a certain pool (without considering the composability).
+
+How is it calculated? Analyzing [the code](https://github.com/pancakeswap/pancake-frontend/blob/develop/src/utils/apr.ts) we can see that is done as follows:
+
+
+$$
+APR = \text{CAKES MINTED PER YEAR}\times \frac{\text{POOL WEIGHT}}{\text{TOTAL POOL LIQUIDITY}} \times \text{CAKE PRICE}
+$$
+
+First of all, from the [Pancake Swap documentation](https://docs.pancakeswap.finance/tokenomics/cake/cake-tokenomics) we read that for each BSC block, $40$ cakes are minted, $10$ of which are given to farms. Given that in BSC a block is mined every 3 seconds, we get that the CAKES given to farms every year are:
+
+$$
+\text{CAKES MINTED PER YEAR} = \text{BLOCKS PER YEAR} \times \text{CAKES PER BLOCK}  
+$$
+
+```{r Some Calculations}
+CAKE_PER_BLOCK = 10
+BSC_BLOCK_TIME = 3
+BLOCKS_PER_YEAR = (60 / BSC_BLOCK_TIME) * 60 * 24 * 365
+
+CAKE_PER_YEAR = BLOCKS_PER_YEAR * CAKE_PER_BLOCK
+```
+
+The pool weight is, on the other hand, a *constant* chosen by the developers for each pool. Considering that the *CAKES* minted and the pool weight are actually *constants*, we can rewrite the formula as:
+
+$$
+APR = k\,\,\frac{\text{CAKE PRICE}}{\text{TOTAL POOL LIQUIDITY}}
+$$
+
+With this in mind, here we define the functions to calculate the APR given the list of the transactions of a certain smart contract. To see how the database of the transactions is obtained, refer to this [Python script](https://github.com/fradeca01/DeFi-Tvl-Analysis/blob/main/download_pswap_db.py).
+
+```{r Private Functions}
+
+
+getContractTokenLiquidity = function(conn, token, address){
+  
+  token = tolower(token)
+  
+
+  res = dbGetQuery(conn, "SELECT * FROM transactions")
+
+  transactions = as_tibble(res)
+
+  transactions = transactions %>%
+    select(blockNumber, timeStamp, fromAddr, toAddr, tokenSymbol, value) %>%
+    mutate(dateTime = lubridate::as_datetime(as.integer(timeStamp))) %>%
+    mutate(tokenSymbol = tolower(tokenSymbol)) %>%
+    arrange(blockNumber)
+
+  outTib = transactions %>%
+    filter(tokenSymbol == token) %>%
+    filter(fromAddr == address) %>%
+    select(blockNumber, dateTime, value)%>%
+    group_by(blockNumber, dateTime) %>%
+    summarise(value = sum(value), .groups = "drop") %>%
+    arrange(blockNumber)
+
+  inTib = transactions %>%
+    filter(tokenSymbol == token) %>%
+    filter(toAddr == address) %>%
+    group_by(blockNumber, dateTime) %>%
+    summarise(value = sum(value), .groups = "drop") %>%
+    arrange(blockNumber)
+
+  liquidity = full_join(outTib, inTib, by=c("blockNumber", "dateTime"),suffix = c("Out", "In")) %>%
+    tidyr::replace_na(list(valueOut = 0, valueIn = 0)) %>%
+    mutate(blockBalance = valueIn - valueOut) %>%
+    arrange(blockNumber) %>%
+    mutate(totBalance = cumsum(blockBalance)) %>%
+    mutate(date = lubridate::as_date(dateTime), time = hms::as_hms(dateTime), hour = as.POSIXlt(dateTime)$hour) %>%
+    select(blockNumber, dateTime, date, time, hour, totBalance)
+}
+
+convertLiquidityToUsd = function (liquidityToken, priceToken){
+
+  liquidityTokenUSD = priceToken %>%
+    select(date, hour, price) %>%
+    right_join(liquidityToken, by=c("date", "hour")) %>%
+    mutate(liquidityUSD = totBalance * price) %>%
+    select(blockNumber, dateTime, date, time, hour, liquidityUSD)
+
+  liquidityT2USD = priceToken %>%
+    select(date, hour, price) %>%
+    right_join(liquidityToken, by=c("date", "hour"))  %>%
+    mutate(liquidityUSD = totBalance * price) %>%
+    select(blockNumber,dateTime, date, time, hour, liquidityUSD)
+}
+```
+
+
+```{r Public Functions}
+open_database = function(address, path){
+  DBaddress = paste("DB-", address, sep="")
+    
+  con = RSQLite::dbConnect(RSQLite::SQLite(), paste(path,"/",DBaddress, sep=""))
+}
+
+getContractTokensName = function(address, path){
+  
+  conn = open_database(address, path)
+
+  res = dbGetQuery(conn, "SELECT tokenSymbol from transactions GROUP BY tokenSymbol ORDER BY count(tokenSymbol) DESC LIMIT 2")
+  
+  dbDisconnect(conn)
+
+  res$tokenSymbol
+}
+
+
+getTotalLiquidity = function(address, tokens, path){
+  
+  #Parameters:
+  #  -address of pool smart contract
+  #  -pool multiplier
+  
+  #Returns:
+  #  -Tibble for the APR over time
+  
+  #STEP 1 open database
+  conn = open_database(address, path)
+  
+  address = tolower(address)
+  
+  #STEP 3 get the liquidity of the tokens
+  liquidityT1 = getContractTokenLiquidity(conn, tokens[1], address)
+  liquidityT2 = getContractTokenLiquidity(conn, tokens[2], address)
+
+  #STEP 4 get the coingecko ids of the pool tokens and cake
+  id1 = get_token_id(tolower(tokens[1]))[1]
+  id2 = get_token_id(tolower(tokens[2]))[1]
+
+  #STEP 5 get the price of the pool tokens and cake
+  priceTibbleT1 = get_token_price(id1, 90, "hourly")
+  priceTibbleT2 = get_token_price(id2, 90, "hourly")
+  
+
+  #STEP 6 calculate the liquidity of tokens in USD
+  liquidityT1USD = convertLiquidityToUsd(liquidityT1, priceTibbleT1)
+  liquidityT2USD = convertLiquidityToUsd(liquidityT2, priceTibbleT2)
+  
+  liquidityPool = inner_join(liquidityT1USD, liquidityT2USD, by=c("blockNumber",   "dateTime", "date", "time", "hour")) %>%
+    mutate(totLiquidity = liquidityUSD.x + liquidityUSD.y) %>%
+    arrange(blockNumber)
+  
+  dbDisconnect(conn)
+  
+  liquidityPool
+}
+  
+getApr = function(liquidityPool, pool_multiplier){
+  
+  cakeID = get_token_id("cake")
+  
+  cakeTibble = get_token_price(cakeID, 90, "hourly")
+  
+  #STEP 7 calculate the APR of the pool
+  pool_weight = pool_multiplier/147.7
+  
+  APRTib = liquidityPool %>%
+    select(blockNumber, dateTime, date, time, hour, totLiquidity) %>%
+    left_join(select(cakeTibble, date, hour, price), by = c("date", "hour")) %>%
+    rename(cakePrice = price) %>%
+    mutate(APR = 100 * cakePrice * CAKE_PER_YEAR * pool_weight / totLiquidity) 
+  
+  APRTib
+}
+
+```
+
+In [Part 1](https://github.com/fradeca01/DeFi-Tvl-Analysis/blob/main/Part1-TVL.html) we saw that the *TVL* of **Pancake Swap** is proportional to the price of *BNB*. If we assume that this holds also for the *Total Pool Liquidity* of each pool, which is eventually a fraction of the *TVL*, we obtain:
+
+$$
+APR \,\propto \,\frac{CAKE}{BNB}
+$$
+
+Now, we analyze the price of CAKE against the one of BNB:
+
+```{r CakeBnb ,echo=FALSE}
+cakeID = get_token_id("cake")
+bnbID = get_token_id("bnb")
+
+cake = get_token_price(cakeID, 180, "daily")%>%
+  select(date, price)
+bnb = get_token_price(bnbID, 180, "daily")%>%
+  select(date, price)
+
+cakebnb = inner_join(cake, bnb, by="date", suffix=c("cake", "bnb"))
+
+# ggplot(cakebnb) +
+#   geom_point(aes(pricebnb, pricecake))
+
+mod = lm(data = cakebnb, pricecake ~ pricebnb)
+
+cakebnb = add_predictions(cakebnb, mod)
+
+r2 = summary(mod)$r.squared
+
+plot0 = ggplot(cakebnb) +
+  geom_point(aes(pricebnb, pricecake), color="darkblue") +
+  geom_line(aes(pricebnb, pred), color="red")+
+  labs(title = "CAKE vs BNB", caption = paste("R^2 =", r2)) +
+  xlab("BNB Price") +
+  ylab("CAKE price") +
+  theme_bw()
+
+plot0
+r2
+```
+
+What we obtained is that $R^2 \approx 0.96$. The *BNB* price and the *CAKE* price has been strongly correlated during last year,  i.e. $CAKE =k\, BNB$. Plugging this result in last formula we obtain that the APR should has been approximately constant.
+
+
+```{r APR, message=FALSE, warning=FALSE, fig.show=TRUE}
+
+#Write here the path of your DBs
+path = "DBs"
+
+#Address of Smart Contract
+address = "0x0eD7e52944161450477ee417DE9Cd3a859b14fD0"
+multiplier = 40
+
+tokens = getContractTokensName(address, path)
+liquidityPool = getTotalLiquidity(address, tokens, path)
+apr = getApr(liquidityPool, multiplier)
+
+plot1 = ggplot(data = filter(apr, APR<600)) +
+  geom_line(mapping = aes(x=dateTime, y = APR), color="red") + 
+  labs(title = paste(tokens[1],"-",tokens[2],"Pool", sep=""), subtitle = "APR over time")+
+  xlab("Date")+
+  scale_y_continuous(limits=c(0,120))+
+  ylab("APR")+
+  theme_bw()
+
+#Address of Smart Contacrt
+address = "0xc20A92a1424b29b78DFaF92FD35D4cf8A06419B4"
+multiplier = 1
+
+tokens = getContractTokensName(address, path)
+liquidityPool = getTotalLiquidity(address, tokens, path)
+apr = getApr(liquidityPool, multiplier)
+
+plot2 = ggplot(data = filter(apr, APR<600)) +
+  geom_line(mapping = aes(x=dateTime, y = APR), color="red") + 
+  labs(title = paste(tokens[1],"-",tokens[2],"Pool", sep=""), subtitle = "APR over time")+
+  xlab("Date")+
+  scale_y_continuous(limits=c(0,500))+
+  ylab("APR")+
+  theme_bw()
+
+#Address of Smart Contacrt
+address = "0x74E4716E431f45807DCF19f284c7aA99F18a4fbc"
+multiplier = 2
+
+tokens = getContractTokensName(address, path)
+liquidityPool = getTotalLiquidity(address, tokens, path)
+apr = getApr(liquidityPool, multiplier)
+
+plot3 = ggplot(data = filter(apr, APR<600)) +
+  geom_line(mapping = aes(x=dateTime, y = APR), color="red") + 
+  labs(title = paste(tokens[1],"-",tokens[2],"Pool", sep=""), subtitle = "APR over time")+
+  xlab("Date")+
+  scale_y_continuous(limits=c(0,30))+
+  ylab("APR")+
+  theme_bw()
+
+address = "0xD171B26E4484402de70e3Ea256bE5A2630d7e88D"
+multiplier = 2
+
+tokens = getContractTokensName(address, path)
+liquidityPool = getTotalLiquidity(address, tokens, path)
+apr = getApr(liquidityPool, multiplier)
+
+plot4 = ggplot(data = filter(apr, APR<600)) +
+  geom_line(mapping = aes(x=dateTime, y = APR), color="red") + 
+  labs(title = paste(tokens[1],"-",tokens[2]," Pool", sep=""), subtitle = "APR over time")+
+  xlab("Date")+
+  scale_y_continuous(limits=c(0,75))+
+  ylab("APR")+
+  theme_bw()
+
+address = "0x133ee93FE93320e1182923E1a640912eDE17C90C"
+multiplier = 0.5
+
+tokens = getContractTokensName(address, path)
+liquidityPool = getTotalLiquidity(address, tokens, path)
+apr = getApr(liquidityPool, multiplier)
+
+plot5 = ggplot(data = filter(apr, APR<600)) +
+  geom_line(mapping = aes(x=dateTime, y = APR), color="red") + 
+  labs(title = paste(tokens[1],"-",tokens[2]," Pool", sep=""), subtitle = "APR over time")+
+  xlab("Date")+
+  scale_y_continuous(limits=c(0,30))+
+  ylab("APR")+
+  theme_bw()
+
+address = "0xEa26B78255Df2bBC31C1eBf60010D78670185bD0"
+multiplier = 1
+
+tokens = getContractTokensName(address, path)
+liquidityPool = getTotalLiquidity(address, tokens, path)
+apr = getApr(liquidityPool, multiplier)
+
+plot6 = ggplot(data = filter(apr, APR<600)) +
+  geom_line(mapping = aes(x=dateTime, y = APR), color="red") + 
+  labs(title = paste(tokens[1],"-",tokens[2]," Pool", sep=""), subtitle = "APR over time")+
+  xlab("Date")+
+  scale_y_continuous(limits=c(0,60))+
+  ylab("APR")+
+  theme_bw()
+
+plot_grid(plot1, plot2, plot3, plot4, plot5, plot6)
+
+aprPlots=list(plot0, plot1, plot2, plot3, plot4, plot5, plot6)
+```
+
+Observing this plots we see that the APR stays constant for most of the time beside of the moment of the creation of the pool, during which we have an abnormal increase of the liquidity of the pool.
+
+***
+
+As in Part 1, we save the result of analysis in a *.rds* file:
+
+```{r saveRDS,  eval=FALSE}
+saveRDS(aprPlots, "aprPlots.rds")
+```
+
+<!--
+Calculate impermanent loss:
+-->
+
+```{r eval=FALSE, include=FALSE}
+# imp_loss = inner_join(priceTibbleT1, 
+#                       priceTibbleT2, 
+#                       by=c("date", "hour"), 
+#                       suffix = c("T1", "T2")) %>%
+# mutate(relative_price = priceT2 / priceT1) %>% -->
+# mutate(perc_of_initial = relative_price / relative_price[1]) %>% -->
+# mutate(impermanent_loss = -(2 * sqrt(perc_of_initial) / (1+perc_of_initial) - 1 ) * 100) 
+# 
+# ggplot() +  
+#   geom_smooth(data = imp_loss, mapping = aes(x = date, y = impermanent_loss)) 
+```
+
+
+
+
