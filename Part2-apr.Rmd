@@ -65,7 +65,7 @@ $$
 APR = k\,\,\frac{\text{CAKE PRICE}}{\text{TOTAL POOL LIQUIDITY}}
 $$
 
-With this in mind, here we define the functions to calculate the APR given the list of the transactions of a certain smart contract. To see how the database of the transactions is obtained, refer to this [Python script](https://github.com/fradeca01/Defi-Tvl/blob/main/download_pswap_db.py).
+With this in mind, here we define the functions to calculate the APR given the list of the transactions of a certain smart contract. To see how the database of the transactions is obtained, refer to this [Python script](https://github.com/fradeca01/DeFi-Tvl-Analysis/blob/main/download_pswap_db.py).
 
 ```{r Private Functions}
 
@@ -231,18 +231,18 @@ mod = lm(data = cakebnb, pricecake ~ pricebnb)
 
 cakebnb = add_predictions(cakebnb, mod)
 
-r2 = summary(mod)$r.squared
+p = cor(cakebnb$pricebnb, cakebnb$pricecake, method="spearman")
 
 plot0 = ggplot(cakebnb) +
   geom_point(aes(pricebnb, pricecake), color="darkblue") +
   geom_line(aes(pricebnb, pred), color="red")+
-  labs(title = "CAKE vs BNB", caption = paste("R^2 =", r2)) +
+  labs(title = "CAKE vs BNB", caption = paste("p =", p)) +
   xlab("BNB Price") +
   ylab("CAKE price") +
   theme_bw()
 
 plot0
-r2
+p
 ```
 
 What we obtained is that $R^2 \approx 0.96$. The *BNB* price and the *CAKE* price has been strongly correlated during last year,  i.e. $CAKE =k\, BNB$. Plugging this result in last formula we obtain that the APR should has been approximately constant.

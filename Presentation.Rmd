@@ -112,11 +112,11 @@ do.call("plot_grid", c(protocols$plot4, ncol=3))
 
 ```{r}
 
-r2 = protocols$r2
+p = protocols$p
 
-names(r2) = protocols$name
+names(p) = protocols$name
 
-r2
+p
 ```
 
 ## Pancake Swap {.build}
@@ -142,6 +142,13 @@ At this point we have learned that:
 $$
 \small TVL \propto \text{CHAIN TOKEN}
 $$
+
+In any case we can analyze **deposits** and **withdrawals** of users through the study of the residuals. We obtain the following plot:
+
+```{r}
+plots[[7]]
+```
+
 
 ## PancakeSwap APR {.build .smaller}
 

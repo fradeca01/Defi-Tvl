@@ -48,11 +48,11 @@ We download the dataset from [DeFi Llama](https://defillama.com/home) API. For e
 ```{r Tidy}
 #Get protocol list
 
-# URL = "https://api.llama.fi/protocols"
-# 
-# data = as_tibble(fromJSON(rawToChar(GET(URL)$content)))
-# 
-# saveRDS(data, file="tvl.rds")
+#URL = "https://api.llama.fi/protocols"
+
+#data = as_tibble(fromJSON(rawToChar(GET(URL)$content)))
+
+#saveRDS(data, file="tvl.rds")
 
 data = readRDS(file = "tvl(2021-06-12).rds") #We are using the data downloaded on 12 June 2021 and saved in a RDS file.
 
@@ -95,7 +95,7 @@ data[data$id %in% ids,]$chainTvls$Ethereum = data[data$id %in% ids,]$tvl
 To begin let's see which platforms (or protocol) have *higher TVL*, grouping them by *chain*.
 
 ```{r TotalTVL}
-plots = vector("list", 6)
+plots = vector("list", 7)
 
 #Plot best platforms grouping in chains:
 plots[[1]] = data %>%
@@ -339,16 +339,13 @@ makeModel = function(x){
 #Plug the model inside the tibble
 protocols = mutate(protocols, model = map(tvl, makeModel))
 
-#Store the R^2 of the models in a list 
-r2 = vector("double", l)
+#Store the p of the models in a list 
+p = vector("double", l)
 for(i in 1:l){
-  r2[[i]] = summary(protocols$model[[i]])$r.squared
+   p[[i]] = cor(protocols$tvl[[i]]$ethPrice, protocols$tvl[[i]]$totalLiquidityUSD, method="spearman")
 }
 
-names(r2) = protocolsNames
-
-protocols = cbind(protocols, r2)
-
+names(p) = protocolsNames
 
 protocols = mutate(protocols, tvl = map2(tvl, model, add_predictions))
 
@@ -356,7 +353,7 @@ genPlot4 = function(name){
   ggplot(data = protocols$tvl[[name]]) +
     geom_point(aes(ethPrice, totalLiquidityUSD), color="darkblue")+
     geom_line(aes(ethPrice, pred), color="red")+
-    labs(title = name, subtitle = "ETH vs TVL", caption=paste("R^2 =",r2[[name]])) +
+    labs(title = name, subtitle = "ETH vs TVL", caption=paste("p =",p[[name]])) +
     xlab("ETH Price") +
     ylab("TVL(Bilion $)") +
     theme_bw()
@@ -364,11 +361,13 @@ genPlot4 = function(name){
 
 protocols = mutate(protocols, plot4= map(name, genPlot4))
 
+protocols = mutate(protocols, p = p)
+
 do.call("plot_grid", c(protocols$plot4, ncol = 3))
-r2
+p
 ```
 
-The $R^2$ results are pretty satisfying, the *TVL* seems to be strongly correlated with *ETH* price. How can we explain this? A reason could be the fact that most of the funds staked in this platforms are *Ether* and therefore the *TVL* is basically following *ETH* price. However, **PancakeSwap** remains developed on the *Binance Smart Chain* and it does not have *ETH* as main token; why the correlation with ETH is good anyway? This probably happens due to the fact that *BNB*, the token of *Binance Smart Chain*, is following the market trend of *ETH*, a currency with higher *marketcap* by far. We can try to prove the correlation between BNB and ETH prices:
+The **Spearman** coefficients are pretty satisfying, the *TVL* seems to be strongly correlated with *ETH* price. How can we explain this? A reason could be the fact that most of the funds staked in this platforms are *Ether* and therefore the *TVL* is basically following *ETH* price. However, **PancakeSwap** remains developed on the *Binance Smart Chain* and it does not have *ETH* as main token; why the correlation with ETH is good anyway? This probably happens due to the fact that *BNB*, the token of *Binance Smart Chain*, is following the market trend of *ETH*, a currency with higher *marketcap* by far. We can try to prove the correlation between BNB and ETH prices:
 
 ```{r BNB}
 
@@ -386,20 +385,20 @@ bnbvseth = inner_join(bnbPrice, ethPrice, by="date", suffix=c("Bnb", "Eth"))
 #   theme_bw()
 
 model = lm(data=bnbvseth, priceBnb ~ priceEth)
-r2 = summary(model)$r.squared
+p = cor(bnbvseth$priceBnb, bnbvseth$priceEth, method = "spearman")
 
 bnbvseth = add_predictions(bnbvseth, model)
 
 plots[[5]] = ggplot(bnbvseth)+
   geom_point(aes(priceEth, priceBnb), color="darkgoldenrod3")+
   geom_line(aes(priceEth, pred), color="red")+
-  labs(title = "BNB vs ETH", caption=paste("R^2 =",r2)) +
+  labs(title = "BNB vs ETH", caption=paste("p =",p)) +
   xlab("ETH Price") +
   ylab("BNB Price") +
   theme_bw()
 
 plots[[5]]
-r2
+p
 
 
 ```
@@ -417,12 +416,12 @@ mod2 = lm(data = pswap, totalLiquidityUSD ~ bnbPrice)
 
 pswap = add_predictions(pswap, mod2)
 
-r2 = summary(mod2)$r.squared
+p = cor(pswap$bnbPrice, pswap$totalLiquidityUSD, method="spearman")
 
 plots[[6]] = ggplot(pswap)+
   geom_point(aes(bnbPrice, totalLiquidityUSD), color="darkblue")+
   geom_line(aes(bnbPrice, pred), color="red")+
-  labs(title = "PancakeSwap", subtitle = "BNB vs TVL", caption = paste("R^2 =", r2)) +
+  labs(title = "PancakeSwap", subtitle = "BNB vs TVL", caption = paste("p =", p)) +
   xlab("BNB Price") +
   ylab("TVL(Bilion $)") +
   theme_bw()
@@ -430,9 +429,48 @@ plots[[6]] = ggplot(pswap)+
 plots[[6]]
 ```
 
-As we guessed **PancakeSwap** *TVL* is better correlated with *BNB*, indeed $R^2\approx0.93$.
+As we guessed **PancakeSwap** *TVL* is better correlated with *BNB*, indeed $p\approx0.96$.
 
 We have learned that the *TVL in USD* of a *DeFi protocol* changes mainly because of the change in the value of the tokens deposited in the platform itself.
+
+In any case, we can analyze the variation of the *TVL* expressed in *BNB* to see deposits and withdrawals of users. In the following plot we can see in **blue** the balance in *BNB* of PancakeSwap with respect to the expected value and in **red** the derivative, which represents the daily variation of the balance. 
+
+```{r}
+coeff = mod2$coefficients[2]
+
+pswap = pswap %>%
+  mutate(totalLiquidityBNB = totalLiquidityUSD / bnbPrice) %>%
+  mutate(resid = totalLiquidityBNB - coeff)
+
+y = unlist(pswap$resid)
+x = 1:length(y)
+
+dy = vector(mode = "double", length = length(y))
+
+for(i in x){
+  if (i == length(y)){
+    dy[i] = y[i] - y[i-1]
+  } else {
+    dy[i] = y[i+1] - y[i]
+  }
+}
+
+pswap = mutate(pswap, derivative = dy)
+
+plots[[7]] = pswap %>%
+  ggplot()+
+  geom_line(aes(date, derivative, color="Derivative")) + 
+  geom_line(aes(date, resid, color="Balance")) +
+  geom_abline(intercept = 0, slope = 0, color="green")+
+  labs(title = "PancakeSwap", 
+       subtitle = "Balance BNB", color="Legend") +
+  xlab("Date") +
+  ylab("Balance(Bilions BNB)") +
+  theme_bw()+
+  scale_color_manual(values = c("Derivative" = "red", "Balance" = "Blue"))
+
+plots[[7]]
+```
 
 ***
 
@@ -440,7 +478,7 @@ With this last chunk we save the *protocols* data-frame and *plots* list, which 
 
 ```{r saveRDS, eval=FALSE}
 protocols = protocols %>%
-  select(name, tvl, plot1, plot2, plot3, plot4, plot5, dygraphsEth, dygraphsNoEth, model, r2)
+  select(name, tvl, plot1, plot2, plot3, plot4, dygraphsEth, dygraphsNoEth, model, p)
 
 saveRDS(protocols, file = "protocols.rds")
 saveRDS(plots, file = "plots.rds")
