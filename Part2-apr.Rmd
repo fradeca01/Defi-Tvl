@@ -213,7 +213,7 @@ $$
 
 Now, we analyze the price of CAKE against the one of BNB:
 
-```{r CakeBnb ,echo=FALSE}
+```{r CakeBnb}
 cakeID = get_token_id("cake")
 bnbID = get_token_id("bnb")
 
@@ -231,18 +231,18 @@ mod = lm(data = cakebnb, pricecake ~ pricebnb)
 
 cakebnb = add_predictions(cakebnb, mod)
 
-p = cor(cakebnb$pricebnb, cakebnb$pricecake, method="spearman")
+r2 = cor(cakebnb$pricebnb, cakebnb$pricecake)^2
 
 plot0 = ggplot(cakebnb) +
   geom_point(aes(pricebnb, pricecake), color="darkblue") +
   geom_line(aes(pricebnb, pred), color="red")+
-  labs(title = "CAKE vs BNB", caption = paste("p =", p)) +
+  labs(title = "CAKE vs BNB", caption = paste("R^2 =", r2)) +
   xlab("BNB Price") +
   ylab("CAKE price") +
   theme_bw()
 
 plot0
-p
+r2
 ```
 
 What we obtained is that $R^2 \approx 0.96$. The *BNB* price and the *CAKE* price has been strongly correlated during last year,  i.e. $CAKE =k\, BNB$. Plugging this result in last formula we obtain that the APR should has been approximately constant.

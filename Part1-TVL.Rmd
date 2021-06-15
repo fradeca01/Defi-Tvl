@@ -324,12 +324,12 @@ makeModel = function(x){
 protocols = mutate(protocols, model = map(tvl, makeModel))
 
 #Store the p of the models in a list 
-p = vector("double", l)
+r2 = vector("double", l)
 for(i in 1:l){
-   p[[i]] = cor(protocols$tvl[[i]]$ethPrice, protocols$tvl[[i]]$totalLiquidityUSD, method="spearman")
+   r2[[i]] = cor(protocols$tvl[[i]]$ethPrice, protocols$tvl[[i]]$totalLiquidityUSD)^2
 }
 
-names(p) = protocolsNames
+names(r2) = protocolsNames
 
 protocols = mutate(protocols, tvl = map2(tvl, model, add_predictions))
 
@@ -337,7 +337,7 @@ genPlot4 = function(name){
   ggplot(data = protocols$tvl[[name]]) +
     geom_point(aes(ethPrice, totalLiquidityUSD), color="darkblue", alpha=0.5)+
     geom_line(aes(ethPrice, pred), color="red")+
-    labs(title = name, subtitle = "ETH vs TVL", caption=paste("p =",p[[name]])) +
+    labs(title = name, subtitle = "ETH vs TVL", caption=paste("R^2 =",r2[[name]])) +
     xlab("ETH Price") +
     ylab("TVL(Bilion $)") +
     theme_bw()
@@ -345,10 +345,10 @@ genPlot4 = function(name){
 
 protocols = mutate(protocols, plot4= map(name, genPlot4))
 
-protocols = mutate(protocols, p = p)
+protocols = mutate(protocols, r2 = r2)
 
 do.call("plot_grid", c(protocols$plot4, ncol = 3))
-p
+r2
 ```
 
 The **Spearman** coefficients are pretty satisfying, the *TVL* seems to be strongly correlated with *ETH* price. How can we explain this? A reason could be the fact that most of the funds staked in this platforms are *Ether* and therefore the *TVL* is basically following *ETH* price. However, **PancakeSwap** remains developed on the *Binance Smart Chain* and it does not have *ETH* as main token; why the correlation with ETH is good anyway? This probably happens due to the fact that *BNB*, the token of *Binance Smart Chain*, is following the market trend of *ETH*, a currency with higher *marketcap* by far. We can try to prove the correlation between BNB and ETH prices:
@@ -369,20 +369,20 @@ bnbvseth = inner_join(bnbPrice, ethPrice, by="date", suffix=c("Bnb", "Eth"))
 #   theme_bw()
 
 model = lm(data=bnbvseth, priceBnb ~ priceEth)
-p = cor(bnbvseth$priceBnb, bnbvseth$priceEth, method = "spearman")
+r2 = cor(bnbvseth$priceBnb, bnbvseth$priceEth)^2
 
 bnbvseth = add_predictions(bnbvseth, model)
 
 plots[[5]] = ggplot(bnbvseth)+
   geom_point(aes(priceEth, priceBnb), color="darkgoldenrod3")+
   geom_line(aes(priceEth, pred), color="red")+
-  labs(title = "BNB vs ETH", caption=paste("p =",p)) +
+  labs(title = "BNB vs ETH", caption=paste("R^2 =",r2)) +
   xlab("ETH Price") +
   ylab("BNB Price") +
   theme_bw()
 
 plots[[5]]
-p
+r2
 
 
 ```
@@ -400,12 +400,12 @@ mod2 = lm(data = pswap, totalLiquidityUSD ~ bnbPrice)
 
 pswap = add_predictions(pswap, mod2)
 
-p = cor(pswap$bnbPrice, pswap$totalLiquidityUSD, method="spearman")
+r2 = cor(pswap$bnbPrice, pswap$totalLiquidityUSD)^2
 
 plots[[6]] = ggplot(pswap)+
   geom_point(aes(bnbPrice, totalLiquidityUSD), color="darkblue")+
   geom_line(aes(bnbPrice, pred), color="red")+
-  labs(title = "PancakeSwap", subtitle = "BNB vs TVL", caption = paste("p =", p)) +
+  labs(title = "PancakeSwap", subtitle = "BNB vs TVL", caption = paste("R^2 =", r2)) +
   xlab("BNB Price") +
   ylab("TVL(Bilion $)") +
   theme_bw()
@@ -479,7 +479,7 @@ With this last chunk we save the *protocols* data-frame and *plots* list, which 
 
 ```{r saveRDS, eval=FALSE}
 protocols = protocols %>%
-  select(name, tvl, plot1, plot2, plot3, plot4, model, p)
+  select(name, tvl, plot1, plot2, plot3, plot4, model, r2)
 
 saveRDS(protocols, file = "protocols.rds")
 saveRDS(plots, file = "plots.rds")

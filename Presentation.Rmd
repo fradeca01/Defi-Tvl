@@ -112,11 +112,11 @@ do.call("plot_grid", c(protocols$plot4, ncol=3))
 
 ```{r}
 
-p = protocols$p
+r2 = protocols$r2
 
-names(p) = protocols$name
+names(r2) = protocols$name
 
-p
+r2
 ```
 
 ## Pancake Swap {.build}
