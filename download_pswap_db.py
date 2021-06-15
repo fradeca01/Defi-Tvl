@@ -135,17 +135,6 @@ def get_last_blockNumber(conn):
 
     return rows[0][0]
 
-
-def get_last_blockNumber(conn):
-    statement = "SELECT MAX(blockNumber) from transactions;"
-
-    cur = conn.cursor()
-    cur.execute(statement)
-
-    rows = cur.fetchall()
-
-    return rows[0][0]
-
 def delete_block(conn, blockNumber):
 
     pprint("Starting to download from block: " + str(blockNumber))
