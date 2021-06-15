@@ -16,7 +16,7 @@ ADDRESS = "0xEa26B78255Df2bBC31C1eBf60010D78670185bD0"
 
 # 3) Write your bsc-scan API-KEY here:
 
-APIKEY = *********
+key = *********
 
 
 def create_connection(dbName):
@@ -198,7 +198,7 @@ if __name__ == '__main__':
         while(flag != 1):
         #    for i in range(0,5):     
             
-            etherscan_request = requests.get('https://api.bscscan.com/api?module=account&action=tokentx&address={}&startblock={}&endblock={}&sort=asc&apikey={}'.format(address,startBlock, endBlock, APIKEY))
+            etherscan_request = requests.get('https://api.bscscan.com/api?module=account&action=tokentx&address={}&startblock={}&endblock={}&sort=asc&apikey={}'.format(address,startBlock, endBlock, key))
             json_data = etherscan_request.json()["result"]
 
             l = len(json_data)
