@@ -14,6 +14,10 @@ PATH = "D:/Francesco/Desktop/Defi Project/Download DB/DBs pswap/"
 
 ADDRESS = "0xEa26B78255Df2bBC31C1eBf60010D78670185bD0"
 
+# 3) Write your bsc-scan API-KEY here:
+
+APIKEY = "K98IZN13XTQKJGAX8IXP6EBGQ9FDJKQJ8B" 
+
 
 def create_connection(dbName):
     conn = None
@@ -137,8 +141,6 @@ def get_last_blockNumber(conn):
 
 def delete_block(conn, blockNumber):
 
-    pprint("Starting to download from block: " + str(blockNumber))
-
     statement = "DELETE from transactions WHERE blockNumber == {}".format(blockNumber)
 
     cur = conn.cursor()
@@ -178,6 +180,7 @@ if __name__ == '__main__':
                 else:
                     last_block = get_last_blockNumber(conn)
                     delete_block(conn, last_block)
+                    pprint("Starting to download from block: " + str(last_block))
                     startBlock = last_block
                     alreadyExist = False
         else:
@@ -195,7 +198,7 @@ if __name__ == '__main__':
         while(flag != 1):
         #    for i in range(0,5):     
             
-            etherscan_request = requests.get('https://api.bscscan.com/api?module=account&action=tokentx&address={}&startblock={}&endblock={}&sort=asc&apikey=K98IZN13XTQKJGAX8IXP6EBGQ9FDJKQJ8B'.format(address,startBlock, endBlock))
+            etherscan_request = requests.get('https://api.bscscan.com/api?module=account&action=tokentx&address={}&startblock={}&endblock={}&sort=asc&apikey={}'.format(address,startBlock, endBlock, APIKEY))
             json_data = etherscan_request.json()["result"]
 
             l = len(json_data)
