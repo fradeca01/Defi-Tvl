@@ -16,7 +16,7 @@ ADDRESS = "0xEa26B78255Df2bBC31C1eBf60010D78670185bD0"
 
 # 3) Write your bsc-scan API-KEY here:
 
-APIKEY = "K98IZN13XTQKJGAX8IXP6EBGQ9FDJKQJ8B" 
+APIKEY = *********
 
 
 def create_connection(dbName):
