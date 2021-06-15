@@ -39,3 +39,5 @@ To run the **presentation** [Presentation.rmd](https://github.com/fradeca01/Defi
 * [protocols.rds](https://github.com/fradeca01/Defi-Tvl/blob/main/protocols.rds)
 * [plots.rds](https://github.com/fradeca01/Defi-Tvl/blob/main/plots.rds)
 * [aprPlots.rds](https://github.com/fradeca01/Defi-Tvl/blob/main/aprPlots.rds)
+
+To run the script [download_pswap_db.py](https://github.com/fradeca01/Defi-Tvl/blob/main/download_pswap_db.py) you need to get your api-key from [bsc-scan](https://bscscan.com/apis)
