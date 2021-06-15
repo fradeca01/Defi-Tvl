@@ -123,13 +123,13 @@ r2
 
 **PancakeSwap** is developed on the **Binance Smart Chain** and it does not have **ETH** as main token; why the correlation with **ETH** is good anyway? 
 
-Correlation between **BNB** and **ETH** prices:
+<!-- Correlation between **BNB** and **ETH** prices: -->
 
-```{r echo=FALSE}
-plots[[5]]
-```
+<!-- ```{r echo=FALSE} -->
+<!-- plots[[5]] -->
+<!-- ``` -->
 
-* **ETH** and the **BNB** are correlated 
+<!-- * **ETH** and the **BNB** are correlated  -->
 
 Model of **PancakeSwap** **TVL** with **BNB Price**:
 
