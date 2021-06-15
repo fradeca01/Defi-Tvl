@@ -1,7 +1,7 @@
 ---
 title: 'Project: TVL of DeFi Protocols'
 author: "Francesco Decataldo"
-date: "15/06/2021"
+date: "16/06/2021"
 output:
   ioslides_presentation: default
   slidy_presentation: default
@@ -137,18 +137,23 @@ Model of **PancakeSwap** **TVL** with **BNB Price**:
 plots[[6]]
 ```
 
-At this point we have learned that:
-
-$$
-\small TVL \propto \text{CHAIN TOKEN}
-$$
-
 In any case we can analyze **deposits** and **withdrawals** of users through the study of the residuals. We obtain the following plot:
 
 ```{r}
 plots[[7]]
 ```
 
+## TVL is not so good as a metric
+
+As we have seen, the **TVL** is hugely influenced by the price of the main token of the blockchain.
+
+It's not a good indicator of the popularity of a **DeFi Application**, as we can see in this plot:
+
+```{r}
+plot_grid(plots[[8]], protocols$plot1[[3]])
+```
+
+The **patterns** are very different!
 
 ## PancakeSwap APR {.build .smaller}
 
@@ -183,6 +188,10 @@ aprPlots[[1]]
 
 The **BNB** price and the **CAKE** price has been strongly correlated during last year,  i.e. $\small CAKE =k\, BNB$. Plugging this result in last formula we obtain that the **APR** should has been approximately constant.
 
+$$
+APR = K
+$$
+
 ## APR is actually costant? {.build}
 
 Let's verify this, plotting the **APR** of some **PancakeSwap** pools:
@@ -190,6 +199,23 @@ Let's verify this, plotting the **APR** of some **PancakeSwap** pools:
 ```{r message=FALSE, warning=FALSE}
 do.call("plot_grid", aprPlots[-1])
 ```
+
+## Future studies
+
+In this study we have seen that **PancakeSwap** liquidity mining program is projected in the way that the **APR** remains as constant as possible during time. This result comes mainly from the fact that:
+
+$$
+\small TVL \propto \text{CHAIN TOKEN}
+$$
+
+We can use this relation for other analysis.
+
+An example is the standard **liquidity pool** reward for staking funds on a pool. 
+
+Study of how **APR** of standard **liquidity pools** evolves in time.
+
+
+
 
 
 
