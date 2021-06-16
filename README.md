@@ -27,8 +27,6 @@ Other required pacakages are:
 * ggplot2
 * jsonlite
 * httr
-* dygraphs
-* xts
 
 To run the **first part** [Part1-TVL.Rmd](https://github.com/fradeca01/Defi-Tvl/blob/main/Part1-TVL.Rmd) it's advisable to download [tvl(2021-06-12).rds](https://github.com/fradeca01/DeFi-Tvl-Analysis/blob/main/tvl(2021-06-12).rds). If you want to download updated data directly from the API you need to uncomment lines 51-53 and comment line 57. Note that the following analysis may become wrong if you use updated data. 
 
